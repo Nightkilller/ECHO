@@ -631,21 +631,34 @@ final class CompanionManager: ObservableObject {
                     var finalDisplayFrame = displayFrame
                     
                     if let label = parseResult.elementLabel {
-                        // 1. Priority 1: Search the active application window's Accessibility hierarchy for the matching element
-                        if let activeAppPos = self.getActiveAppUIElementLocation(named: label) {
-                            finalLocation = activeAppPos
-                            if let primaryScreen = NSScreen.screens.first {
-                                finalDisplayFrame = primaryScreen.frame
+                        let isFrontmostAppFinder = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder"
+                        var resolvedPos: CGPoint? = nil
+                        
+                        if isFrontmostAppFinder {
+                            // If Finder is active, prioritize Finder Desktop icon snapping first
+                            if let desktopPos = self.getDesktopIconPosition(named: label) {
+                                resolvedPos = desktopPos
+                                print("🎯 Pixel-perfect Finder Desktop Override (Finder Active): Snapped pointing target to Desktop icon \"\(label)\" at \(desktopPos)")
+                            } else if let activeAppPos = self.getActiveAppUIElementLocation(named: label) {
+                                resolvedPos = activeAppPos
+                                print("🎯 Pixel-perfect Accessibility Override (Finder Fallback): Snapped pointing target to \"\(label)\" at \(activeAppPos)")
                             }
-                            print("🎯 Pixel-perfect Accessibility Override: Snapped pointing target to \"\(label)\" at \(activeAppPos)")
+                        } else {
+                            // If another app is active, prioritize Accessibility tree snapping first
+                            if let activeAppPos = self.getActiveAppUIElementLocation(named: label) {
+                                resolvedPos = activeAppPos
+                                print("🎯 Pixel-perfect Accessibility Override: Snapped pointing target to \"\(label)\" at \(activeAppPos)")
+                            } else if let desktopPos = self.getDesktopIconPosition(named: label) {
+                                resolvedPos = desktopPos
+                                print("🎯 Pixel-perfect Finder Desktop Override (Fallback): Snapped pointing target to Desktop icon \"\(label)\" at \(desktopPos)")
+                            }
                         }
-                        // 2. Priority 2: Fall back to Finder Desktop folder snapping
-                        else if let desktopPos = self.getDesktopIconPosition(named: label) {
-                            finalLocation = desktopPos
+                        
+                        if let resolvedPos = resolvedPos {
+                            finalLocation = resolvedPos
                             if let primaryScreen = NSScreen.screens.first {
                                 finalDisplayFrame = primaryScreen.frame
                             }
-                            print("🎯 Pixel-perfect Finder Desktop Override: Snapped pointing target to Desktop icon \"\(label)\" at \(desktopPos)")
                         }
                     }
 
@@ -1051,6 +1064,11 @@ final class CompanionManager: ObservableObject {
         
         if let matchedElement = findUIElement(named: cleanLabel, in: appElement) {
             if let center = getElementCenterLocation(matchedElement) {
+                // Reject center locations that are at or extremely close to (0.0, 0.0) as they are dummy/container AX elements
+                if center.x < 0.1 && center.y < 0.1 {
+                    print("⚠️ Accessibility Matcher: found active app UI element \"\(cleanLabel)\" but rejected coordinate near zero \(center)")
+                    return nil
+                }
                 print("🎯 Accessibility Matcher: found active app UI element \"\(cleanLabel)\" at AppKit (\(center.x), \(center.y))")
                 return center
             }
