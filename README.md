@@ -1,15 +1,45 @@
-# 🎙️ Echo: Glowing Agentic Voice Companion for macOS
+# 🎙️ ECHO: Glowing Agentic Voice Companion & Real-Time On-Screen Mentor for macOS
 
-**Echo** is a premium, always-on visual AI companion that lives directly in your macOS menu bar. Driven by a simple keyboard shortcut, Echo looks at your displays, listens to your voice instructions, and translates your intentions into physical operating system interactions—like soaring across monitors to **open local directories** or programmatically **closing Finder windows** in synchronized landing.
+<p align="center">
+  <img src="echo/echo_app_icon.png" alt="Echo Icon" width="120" height="120" />
+</p>
 
-Echo is built to feel alive. Rather than teleporting, your companion flies along smooth, physics-based arcing curves, rotating dynamically to align with its trajectory, and landing exactly on target.
+<p align="center">
+  <strong>An always-on visual AI companion that lives directly in your macOS menu bar, guiding you in real-time.</strong>
+</p>
+
+<p align="center">
+  <a href="#-about-the-project"><img src="https://img.shields.io/badge/Project-Echo-blue?style=flat-square" alt="Project" /></a>
+  <a href="#%EF%B8%8F-tech-stack"><img src="https://img.shields.io/badge/Tech-SwiftUI%20%7C%20AppKit%20%7C%20Groq%20API-orange?style=flat-square" alt="Tech Stack" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License" /></a>
+  <a href="#-improved-by"><img src="https://img.shields.io/badge/Improved%20by-Aditya%20Gupta-purple?style=flat-square" alt="Author" /></a>
+</p>
 
 ---
 
-## 💡 Inspiration & Attribution
-Echo is a highly customized fork and comprehensive redesign of the original open-source **`learning-buddy`** assistant created by **Farza**, released under the permissive **MIT License**. 
+## 💡 About the Project & The Vision
 
-While preserving the magical essence of an on-screen visual companion, we have re-engineered the application to feature a premium upfront permissions checklist, fully-offline local voice transcribing, an advanced agentic click-sync layer (closing windows & folder path resolutions), and stutter-proof `.common` run loop tracking.
+**Echo** is a premium, always-on visual AI companion for macOS. Driven by a simple global keyboard shortcut, Echo looks at your screen, listens to your voice instructions, and translates your intentions into physical operating system interactions—like soaring across monitors to **point out specific options**, **open local directories**, or programmatically **closing Finder windows**.
+
+### 🌟 The Inspiration
+This project is inspired by the original open-source **`learning-buddy`** assistant created by **Farza** (MIT License). 
+
+While preserving the magical essence of an on-screen visual companion that physically flies along physics-based arcing curves, **Aditya Gupta** has extensively re-engineered the application, introducing a powerful **Agentic click-sync layer** and deep OS automation. We are still actively developing and constantly improving this project to reach its full potential.
+
+### 🎯 Our Mission: Breaking "Tutorial Hell"
+> **The Core Aim:** To create an interactive AI companion that helps **beginners, self-learners, and non-trained individuals** directly master any software in real-time, right inside the application they are trying to learn. 
+>
+> Traditionally, learning new software means constantly changing tabs, pausing a YouTube tutorial, switching back to the app, making a mistake, and repeating this frustrating cycle. **Echo destroys this friction.** It acts as a visual, interactive tutor directly on top of your workspace—guiding your eyes, highlighting buttons, and opening resources without you ever leaving your active window.
+
+---
+
+## ⚡ Key Features
+
+* **Parabolic Bezier Flight:** The companion (a glowing blue triangle) does not simply teleport. It flies along physics-based quadratic curves, rotating dynamically to align with its trajectory, scaling up at the apex, and landing exactly on target.
+* **Push-To-Talk Listening:** Hold down `Control + Option` to transform the companion into an active, glowing blue voice waveform that listens to your queries.
+* **Offline Local Transcription:** Uses macOS's native, offline **Apple Speech framework** to transcribe your voice locally on-device. No audio files are sent over the network, ensuring complete privacy.
+* **Agentic OS Integration:** Dynamically parses voice instructions into structured local actions, like opening paths or automating UI clicks.
+* **Starvation-Proof Timers:** Core tracking and animations are scheduled on `RunLoop.main` in `.common` mode, preventing the cursor from freezing even during heavy UI interaction (like window dragging).
 
 ---
 
@@ -17,85 +47,114 @@ While preserving the magical essence of an on-screen visual companion, we have r
 
 Echo's operation is structured into 6 highly optimized stages that run sequentially on the main thread and background tasks:
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Keyboard as globalShortcutMonitor
+    participant Speech as AppleSpeechEngine
+    participant Capturer as ScreenCaptureUtility
+    participant AI as GroqAPI (Llama-4 Scout)
+    participant OS as macOS (AX & Finder APIs)
+    participant Bubble as SwiftUI OverlayWindow
+
+    User->>Keyboard: Hold [Control + Option] & Speak
+    Keyboard->>Speech: Stream mic audio buffer
+    Speech-->>User: Transcribe speech to text offline (Real-time)
+    User->>Keyboard: Release [Control + Option]
+    Keyboard->>Capturer: Request high-res screenshot (2048px max)
+    Capturer-->>Keyboard: Return JPEG image data
+    Keyboard->>AI: Send image + transcription prompt
+    AI-->>Keyboard: Return response with [POINT:x,y:label] and [RUN:...]
+    Keyboard->>OS: Run Priority Snapping (Accessibility -> Finder -> Vision)
+    OS-->>Keyboard: Return perfect, resolved screen point
+    Keyboard->>Bubble: Trigger Parabolic Bezier flight animation
+    Bubble-->>User: Snap precisely onto target & show spoken text bubble
 ```
-[User PTT Press] ────> [Audio Recording] ────> [Screen Capture] ────> [AI analysis & AX query]
-                                                                                │
-                                                                                ▼
-[Execute Action] <──── [Time-Delayed Sync] <──── [Bezier swoop Flight] <──── [Coordinate Translation]
-```
-
-### 1. The Recording Phase (Voice-to-Text)
-* **Components**: `BuddyDictationManager` & `AppleSpeechTranscriptionProvider`
-* **Workflow**: When you hold down the push-to-talk hotkey (`Control + Option`), Echo opens an audio input channel via your microphone. It records your voice and streams the audio buffer to macOS's built-in, offline **Apple Speech framework**.
-* **Purpose**: Transcribes your voice instruction into clean text locally on your device without sending voice files to third-party APIs.
-
-### 2. Context Gathering (Screen Capture)
-* **Components**: `CompanionScreenCaptureUtility`
-* **Workflow**: The moment the hotkey is released, Echo immediately captures a high-resolution screenshot of all connected monitors using ScreenCaptureKit.
-* **Purpose**: Captures the exact screen state (visible folders, active Finder windows, layouts) to send alongside your transcribed prompt.
-
-### 3. Agentic Command Parsing (LLM & AXUIElement Queries)
-* **Components**: `CompanionManager` & `GroqAPI`
-* **Workflow**: The screenshots and text prompt are processed by your custom AI model on Groq. The AI parses the request and outputs action tags:
-  * **To Open a Folder**: The AI determines where the folder icon is and appends `[POINT:x,y:label]` plus `[RUN:open_folder:folderPath]`.
-  * **To Close a Window**: When you say "close the folder", Echo bypasses the AI's pixel-counting entirely and queries **macOS Accessibility APIs (`AXUIElement`)** to programmatically discover the exact global screen coordinates of the frontmost Finder window's red close button. It generates the flight coordinates automatically.
-
-### 4. Coordinate Translation (Pixel to Screen Points)
-* **Components**: `CompanionManager.swift`
-* **Workflow**: Screen captures use raw **pixel space** (e.g., $2880 \times 1800$), whereas SwiftUI and macOS windows use **points space** (e.g., $1440 \times 900$) and have different origins (LLM uses top-left, AppKit uses bottom-left). Echo translates this:
-  $$\text{LocalPointsX} = x_{\text{pixel}} \times \left(\frac{\text{Display Width}}{\text{Screenshot Width}}\right)$$
-  $$\text{AppKitY} = \text{Display Height} - \left(y_{\text{pixel}} \times \frac{\text{Display Height}}{\text{Screenshot Height}}\right)$$
-* **Purpose**: Maps coordinates precisely to your screen, accounting for multi-monitor setups.
-
-### 5. Curved Swoop Flight (Bezier Animation)
-* **Components**: `OverlayWindow.swift`
-* **Workflow**: Once coordinates are translated, the blue triangle cursor triggers a quadratic Bezier flight path.
-  * **Dynamic Timing**: Calculates the distance and determines flight duration (scaled between `0.6s` and `1.4s`).
-  * **Tangent Rotation**: Rotates the triangle dynamically each frame to face its instantaneous direction of travel.
-  * **Midpoint Pulse**: Scales the buddy up to `1.3x` at the apex of the arc before shrinking back to `1.0x` as it lands.
-* **Starvation Prevention**: The tracking and flight timers are scheduled on `RunLoop.main` in `.common` mode. This ensures the buddy **never freezes** even if you are actively dragging windows, scrolling, or clicking other applications.
-
-### 6. Land & Synchronized Action
-* **Components**: `CompanionManager.swift`
-* **Workflow**: Echo calculates the flight duration and schedules the target operation to trigger exactly `flightDuration + 0.15` seconds later.
-  * **Open**: Lands beside the folder icon and opens the directory via `NSWorkspace.shared.open(url)`. Includes a path resolver that replaces generic `/Users/username/` references with your actual current home directory (`/Users/adityagupta/`) and searches your Desktop/workspace if folders are moved.
-  * **Close**: Lands exactly on the red close button and triggers a native Accessibility press (`AXUIElementPerformAction`), closing the window cleanly.
 
 ---
 
-## 🔒 Startup Checklist & Upfront Permissions
+## 🛠️ Tech Stack
 
-Rather than interrupting your workflow with arbitrary system requests, Echo groups all six essential security permissions into a polished, unified checklist during your first launch setup:
-
-1. **Microphone**: Records your voice instructions.
-2. **Speech Recognition**: Transcribes voice to text locally.
-3. **Screen Recording**: Captures screenshots to let the AI see your workspace.
-4. **Screen Content**: Persists capturing coordinates across multiple screens.
-5. **Finder Automation**: Allows Echo to communicate with Finder windows.
-6. **Desktop Folder Access**: Grants sandboxed clearance to open and query folders on your drive.
+| Layer | Technologies Used |
+| :--- | :--- |
+| **Core Frameworks** | `SwiftUI`, `AppKit`, `Foundation`, `Combine` |
+| **System Automation** | `CoreGraphics`, `Accessibility API (AXUIElement)`, `NSAppleScript` |
+| **Screen Capture** | `ScreenCaptureKit` (Optimized display filtering) |
+| **Voice Processing** | `AVFoundation` (Microphone recording), `Speech` (Offline transcription) |
+| **AI LLM API** | `Groq Vision API` (Low latency endpoint) |
+| **Vision Model** | `meta-llama/llama-4-scout-17b-16e-instruct` |
+| **Text-To-Speech** | `ElevenLabs TTS` (with Apple System speech fallback) |
 
 ---
 
-## 🛠️ Installation & Build
+## 🚀 The Improvements We Made (Deep Engineering)
+
+To make Echo a truly production-grade tool with pixel-perfect accuracy, we built several core custom systems on top of the original prototype:
+
+### 1. Robust Case/Space-Insensitive Coordinate Parsing
+* **Problem:** Original regex parsers were rigid and expected exact integer coordinates with no spaces. Standard Llama models frequently output float coordinates (like `0.074` for percentages) or add standard spacing (`[POINT: 810, 0.074 : microsoft]`), causing the previous parser to fail and read raw coordinates out loud.
+* **Solution:** Rewrote the parser using a case-insensitive, whitespace-tolerant pattern (`#"\[\s*POINT\s*:\s*(?:none|(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)...)\s*\]"#`). All tags are stripped cleanly from spoken text, and normalized decimal coordinates (0.0 to 1.0) are automatically detected and scaled to matching pixel coordinates based on the screen size.
+
+### 2. High-Resolution Display Captures
+* **Problem:** Screenshots were previously limited to a max dimension of `1280` pixels, which heavily blurred small text (like *"Battery"* or *"Displays"* in System Settings) on high-density Retina displays.
+* **Solution:** Increased the capture limit to **`2048` max dimension**, delivering crisp text resolution to the vision model and dramatically reducing AI hallucination.
+
+### 3. High-Priority Snapping Override Pipeline
+* **Problem:** Vision coordinate regression is never 100% pixel-perfect (often off by 20–40 pixels).
+* **Solution:** Built a multi-layered coordinate resolution pipeline that executes in this priority order:
+  1. **Accessibility Snap:** Grabs the frontmost window and recursively traverses the **Accessibility Tree (`AXUIElement`)** to locate a button or menu option matching the spoken text (e.g. *"Battery"*). If found, it snaps *exactly* to its OS-level center point.
+  2. **Finder Desktop Snap:** Runs a safe AppleScript Finder check. If pointing to a Desktop item (e.g. your folder `"KURSOR"`), it overrides coordinates with Finder's exact desktop grid icon positions.
+  3. **High-Res Vision Snap:** Falls back to AI vision guesses if pointing to abstract coordinate targets.
+
+---
+
+## 📂 Project Structure
+
+```
+clicky-main/
+├── README.md                 # Project vision, features, and setup
+├── ARCHITECTURE.md           # Deep-dive module breakdowns
+├── build.sh                  # Custom compilation & codesigning script
+├── create_icns.sh            # macOS AppIcon generator (portable)
+├── echo/                     # Core Swift Code
+│   ├── echoApp.swift         # Main Entry point & App delegate
+│   ├── CompanionManager.swift# Main state machine, API pipeline, and coordinate overrides
+│   ├── OverlayWindow.swift   # Bezier flight & BlueCursorView SwiftUI layout
+│   ├── CompanionScreenCaptureUtility.swift # SCKit screen capturer
+│   ├── ElementLocationDetector.swift # AX element traversal
+│   ├── GroqAPI.swift         # Vision API connection
+│   ├── Assets.xcassets/      # Icon assets
+│   ├── Config.swift          # Model config & Env loader
+│   ├── DesignSystem.swift    # Theme and typography styles
+│   └── echo.entitlements     # App privileges (Sandbox disabled for automation)
+├── echoTests/                # Tests
+├── echoUITests/              # UI Tests
+└── worker/                   # Auxiliary cloud resources
+```
+
+---
+
+## 🔧 Installation & Setup
 
 ### Prerequisites
-Make sure your Mac has Xcode command-line tools installed:
-```bash
-xcode-select --install
-```
+1. A Mac running macOS 13.0 or later.
+2. Xcode Command Line Tools installed:
+   ```bash
+   xcode-select --install
+   ```
 
-### Build Steps
-
-1. Configure your custom Groq API credentials in `.env` inside the `echo` subfolder:
+### Quick Build & Run Steps
+1. Create a `.env` file in the `echo` subfolder (or let the app read your environment):
    ```env
    GROQ_API_KEY=your_groq_api_key
    MODEL_NAME=meta-llama/llama-4-scout-17b-16e-instruct
    ```
-2. Build, package, and sign the application:
+2. Build and sign the application from the project root:
    ```bash
    ./build.sh
    ```
-3. Launch your freshly built Echo application:
+3. Run the application bundle:
    ```bash
    open Echo.app
    ```
@@ -104,38 +163,30 @@ xcode-select --install
 
 ## 🎮 Detailed Usage Guide
 
-### Getting Started (First Launch)
-* When you launch `Echo.app`, the **Echo Settings** panel will automatically drop down beneath the menu bar icon.
-* Click **"Grant"** next to each permission in the list.
-* Press the **"Start"** button to play the welcome animation.
+### First-Launch Permissions Setup
+When you launch Echo for the first time, a polished system status checklist will appear. Make sure to **Grant** these essential system permissions:
+1. **Accessibility**: For mouse tracking and window automation.
+2. **Screen Recording**: To allow the vision AI to see your screen context.
+3. **Microphone & Speech Recognition**: For push-to-talk recording and offline transcription.
+4. **Desktop Access**: To allow Echo to open local paths for you.
 
 ### Interacting with Echo
-* **Hold `Control + Option`**: The buddy cursor transforms into a glowing, animated blue soundwave and begins listening.
-* **Speak Your Instruction**: Keep holding the hotkey while speaking.
-* **Release `Control + Option`**: The waveform transforms into a rotating blue processing spinner while the AI calculates the response, then the buddy takes off!
-
-### Voice Command Examples:
-* **Pointing**: *"Show me where my submission file is"* (The buddy swoops and points to the file).
-* **Opening**: *"Open the folder KURSOR for me"* (The buddy flies to the folder and opens it inside Finder).
-* **Closing**: *"Close this folder window"* (The buddy flies straight to the close button and closes it).
-
-### Managing Settings & Quitting
-* Click the **Echo** triangle in your menu bar to toggle settings, change the selected Groq LLM model, or click **"Quit Echo"** to exit.
-
----
-
-## 🔧 Troubleshooting & FAQs
-
-#### Q: The hotkey doesn't respond or wake up Echo?
-If you recently re-built or signed the application, macOS might occasionally lock the Accessibility tap. To resolve this:
-1. Open **System Settings > Privacy & Security > Accessibility**.
-2. Toggle **Echo** off and back on again.
-
-#### Q: The folder says it is opening but nothing happens?
-* Check `clicky.log` in your project folder to see what path was resolved.
-* Echo has a smart resolver that automatically searches `/Users/adityagupta/Desktop/` and `/Users/adityagupta/Desktop/KURSOR/` for your folder. Make sure the folder physically exists in one of these directories.
+* **Trigger:** Press and hold **`Control + Option`**. The blue companion will transform into a glowing soundwave, listening to you.
+* **Instruction:** Speak your query while holding the keys (e.g. *"point to the Battery option in my settings"* or *"open the folder KURSOR"*).
+* **Release:** Release the keys. The soundwave will spin while processing, and then swoops to point cleanly to your target!
 
 ---
 
 ## 📝 License
-This software is licensed under the **MIT License**. See the `LICENSE` file for details.
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+
+---
+
+## 👨‍💻 Improved by
+
+<p align="left">
+  <strong>Aditya Gupta</strong><br />
+  <em>AI Systems Engineer & Swift Developer</em>
+</p>
+
+*If you find this project inspiring or helpful, consider leaving a ⭐ on the repository!*
