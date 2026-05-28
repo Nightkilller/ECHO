@@ -477,14 +477,19 @@ final class CompanionManager: ObservableObject {
     if pointing wouldn't help, append [POINT:none].
 
     agentic actions:
-    you can open folders and close folder windows.
+    you can open folders, close windows, maximize windows, and tile/shift windows left or right.
     - open a folder: if the user asks to open a specific folder (e.g. "open the folder KURSOR" or "open echo-main"), locate the folder icon on screen. if visible, point to it: [POINT:x,y:folderName] and append [RUN:open_folder:folderPath] where folderPath is the absolute path of the folder (e.g. "/Users/adityagupta/Desktop/KURSOR" or "/Users/adityagupta/Desktop/KURSOR/echo-main"). if the folder is not visible, point to none and still append [RUN:open_folder:folderPath].
     - close a folder window: if the user asks you to close a folder/window, append [RUN:close_folder] at the very end of the response.
+    - maximize/fill screen: if the user asks to maximize, fill the screen, or make the folder/window full screen, point to the window's center or title bar, and append [RUN:maximize_window].
+    - tile/shift window left: if the user asks to shift the window to the left, tile left, or split left, point to the window, and append [RUN:tile_left].
+    - tile/shift window right: if the user asks to shift the window to the right, tile right, or split right, point to the window, and append [RUN:tile_right].
 
     examples:
     - user asks how to color grade in final cut: "you'll want to open the color inspector — it's right up in the top right area of the toolbar. click that and you'll get all the color wheels and curves. [POINT:1100,42:color inspector]"
     - user asks to open the folder KURSOR: "opening the kursor folder for you. [POINT:450,230:kursor][RUN:open_folder:/Users/adityagupta/Desktop/KURSOR]"
     - user asks to close this folder: "closing the folder window. [RUN:close_folder]"
+    - user asks to maximize this window: "maximizing the window to fill the screen for you. [POINT:500,300:window][RUN:maximize_window]"
+    - user asks to shift this window to the left: "tiling this window to the left side of the screen. [POINT:400,300:window][RUN:tile_left]"
     - user asks what html is: "html stands for hypertext markup language, it's basically the skeleton of every web page. curious how it connects to the css you're looking at? [POINT:none]"
     """
 
@@ -550,6 +555,7 @@ final class CompanionManager: ObservableObject {
                 print("🎯 Parsed screen number: \(String(describing: parseResult.screenNumber))")
                 print("🎯 Parsed open_folder path: \(String(describing: actionResult.openFolderPath))")
                 print("🎯 Parsed close_folder: \(actionResult.shouldCloseFolder)")
+                print("🎯 Parsed window_action: \(String(describing: actionResult.windowAction))")
 
                 var actionFlightTarget: CGPoint? = nil
 
@@ -709,10 +715,19 @@ final class CompanionManager: ObservableObject {
                     print("🎯 Element pointing: (\(Int(rawX)), \(Int(rawY))) [original: (\(pointCoordinate.x), \(pointCoordinate.y))] → \"\(parseResult.elementLabel ?? "element")\"")
                     
                     if let openPath = actionResult.openFolderPath {
-                        flightDuration = self.calculateFlightDuration(to: finalLocation)
+                        let duration = self.calculateFlightDuration(to: finalLocation)
+                        flightDuration = duration
                         Task {
-                            try? await Task.sleep(nanoseconds: UInt64((flightDuration + 0.15) * 1_000_000_000))
+                            try? await Task.sleep(nanoseconds: UInt64((duration + 0.15) * 1_000_000_000))
                             self.openFolder(at: openPath)
+                        }
+                    }
+                    if let winAction = actionResult.windowAction {
+                        let duration = self.calculateFlightDuration(to: finalLocation)
+                        flightDuration = duration
+                        Task {
+                            try? await Task.sleep(nanoseconds: UInt64((duration + 0.15) * 1_000_000_000))
+                            self.performWindowAction(winAction)
                         }
                     }
                 } else {
@@ -722,6 +737,10 @@ final class CompanionManager: ObservableObject {
                     if let openPath = actionResult.openFolderPath {
                         print("🎯 Opening folder without cursor flight: \(openPath)")
                         self.openFolder(at: openPath)
+                    }
+                    if let winAction = actionResult.windowAction {
+                        print("🎯 Performing window action without cursor flight: \(winAction)")
+                        self.performWindowAction(winAction)
                     }
                 }
 
@@ -881,12 +900,14 @@ final class CompanionManager: ObservableObject {
         let spokenText: String
         let openFolderPath: String?
         let shouldCloseFolder: Bool
+        let windowAction: String? // "maximize", "tile_left", "tile_right", or nil
     }
 
     static func parseActionCommands(from responseText: String) -> ActionParseResult {
         var cleanText = responseText
         var openFolderPath: String? = nil
         var shouldCloseFolder = false
+        var windowAction: String? = nil
 
         // Match [RUN:open_folder:path] case-insensitively and with arbitrary spacing
         let openFolderPattern = #"\[\s*RUN\s*:\s*open_folder\s*:\s*([^\]]+)\]"#
@@ -910,10 +931,41 @@ final class CompanionManager: ObservableObject {
             cleanText = regex.stringByReplacingMatches(in: cleanText, options: [], range: nsRange, withTemplate: "")
         }
 
+        // Match [RUN:maximize_window] or [RUN:maximize_folder] case-insensitively and with arbitrary spacing
+        let maximizePattern = #"\[\s*RUN\s*:\s*maximize_(?:window|folder)\s*\]"#
+        if let regex = try? NSRegularExpression(pattern: maximizePattern, options: [.caseInsensitive]) {
+            let nsRange = NSRange(cleanText.startIndex..., in: cleanText)
+            if regex.firstMatch(in: cleanText, options: [], range: nsRange) != nil {
+                windowAction = "maximize"
+            }
+            cleanText = regex.stringByReplacingMatches(in: cleanText, options: [], range: nsRange, withTemplate: "")
+        }
+
+        // Match [RUN:tile_left] case-insensitively and with arbitrary spacing
+        let tileLeftPattern = #"\[\s*RUN\s*:\s*tile_left\s*\]"#
+        if let regex = try? NSRegularExpression(pattern: tileLeftPattern, options: [.caseInsensitive]) {
+            let nsRange = NSRange(cleanText.startIndex..., in: cleanText)
+            if regex.firstMatch(in: cleanText, options: [], range: nsRange) != nil {
+                windowAction = "tile_left"
+            }
+            cleanText = regex.stringByReplacingMatches(in: cleanText, options: [], range: nsRange, withTemplate: "")
+        }
+
+        // Match [RUN:tile_right] case-insensitively and with arbitrary spacing
+        let tileRightPattern = #"\[\s*RUN\s*:\s*tile_right\s*\]"#
+        if let regex = try? NSRegularExpression(pattern: tileRightPattern, options: [.caseInsensitive]) {
+            let nsRange = NSRange(cleanText.startIndex..., in: cleanText)
+            if regex.firstMatch(in: cleanText, options: [], range: nsRange) != nil {
+                windowAction = "tile_right"
+            }
+            cleanText = regex.stringByReplacingMatches(in: cleanText, options: [], range: nsRange, withTemplate: "")
+        }
+
         return ActionParseResult(
             spokenText: cleanText.trimmingCharacters(in: .whitespacesAndNewlines),
             openFolderPath: openFolderPath,
-            shouldCloseFolder: shouldCloseFolder
+            shouldCloseFolder: shouldCloseFolder,
+            windowAction: windowAction
         )
     }
 
@@ -1198,5 +1250,66 @@ final class CompanionManager: ObservableObject {
         }
     }
 
+    private func performWindowAction(_ action: String) {
+        guard let frontApp = NSWorkspace.shared.frontmostApplication else { return }
+        let appElement = AXUIElementCreateApplication(frontApp.processIdentifier)
+        
+        var windowValue: AnyObject?
+        let result = AXUIElementCopyAttributeValue(appElement, kAXMainWindowAttribute as CFString, &windowValue)
+        
+        // Fallback to frontmost window if main window is not set
+        var windowToUse: AXUIElement? = nil
+        if result == .success, let win = windowValue {
+            windowToUse = (win as! AXUIElement)
+        } else {
+            var windowsValue: AnyObject?
+            let winResult = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsValue)
+            if winResult == .success, let windows = windowsValue as? [AXUIElement], let firstWin = windows.first {
+                windowToUse = firstWin
+            }
+        }
+        
+        guard let window = windowToUse else {
+            print("⚠️ Window action error: No frontmost window found for \(frontApp.localizedName ?? "app")")
+            return
+        }
+        
+        // Get the screen frame for the window
+        guard let screen = NSScreen.screens.first else { return }
+        let visibleFrame = screen.visibleFrame // frame excluding dock and menu bar
+        
+        var newPosition: CGPoint = visibleFrame.origin
+        var newSize: CGSize = visibleFrame.size
+        
+        // Convert from AppKit (bottom-left) to AX (top-left) screen coordinates
+        let mainScreenHeight = NSScreen.screens.first?.frame.height ?? 0
+        
+        if action == "maximize" {
+            newPosition = CGPoint(x: visibleFrame.origin.x, y: mainScreenHeight - (visibleFrame.origin.y + visibleFrame.size.height))
+            newSize = visibleFrame.size
+        } else if action == "tile_left" {
+            newSize = CGSize(width: visibleFrame.size.width / 2.0, height: visibleFrame.size.height)
+            newPosition = CGPoint(x: visibleFrame.origin.x, y: mainScreenHeight - (visibleFrame.origin.y + visibleFrame.size.height))
+        } else if action == "tile_right" {
+            newSize = CGSize(width: visibleFrame.size.width / 2.0, height: visibleFrame.size.height)
+            newPosition = CGPoint(x: visibleFrame.origin.x + newSize.width, y: mainScreenHeight - (visibleFrame.origin.y + visibleFrame.size.height))
+        } else {
+            return
+        }
+        
+        // Set new position
+        var posValue = newPosition
+        if let axPosValue = AXValueCreate(.cgPoint, &posValue) {
+            AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, axPosValue)
+        }
+        
+        // Set new size
+        var sizeValue = newSize
+        if let axSizeValue = AXValueCreate(.cgSize, &sizeValue) {
+            AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, axSizeValue)
+        }
+        
+        print("🎯 Handled window action \"\(action)\" on \(frontApp.localizedName ?? "app")")
+    }
 
 }

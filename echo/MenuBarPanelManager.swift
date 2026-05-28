@@ -160,7 +160,7 @@ final class MenuBarPanelManager: NSObject {
         )
 
         menuBarPanel.isFloatingPanel = true
-        menuBarPanel.level = .floating
+        menuBarPanel.level = .statusBar
         menuBarPanel.isOpaque = false
         menuBarPanel.backgroundColor = .clear
         menuBarPanel.hasShadow = false
