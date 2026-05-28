@@ -39,6 +39,7 @@ While preserving the magical essence of an on-screen visual companion that physi
 * **Push-To-Talk Listening:** Hold down `Control + Option` to transform the companion into an active, glowing blue voice waveform that listens to your queries.
 * **Offline Local Transcription:** Uses macOS's native, offline **Apple Speech framework** to transcribe your voice locally on-device. No audio files are sent over the network, ensuring complete privacy.
 * **Bilingual & Dialect Support:** Natively supports dictation and voice interactions in **Hindi, Hinglish (Hindi written in Roman script), and English**. The local speech recognizer is fully optimized for Indian accents, and the AI model is instructed to automatically match your spoken language when talking back.
+* **Circular Magnifying Lens Highlight:** When pointing at folders or items, Echo overlays a premium high-tech circular magnifying lens directly over the target, rendering a crop of the raw screen buffer scaled by **1.3x** with a gloss glare metal rim so the user instantly spots their item.
 * **Agentic OS Integration:** Dynamically parses voice instructions into structured local actions, like opening paths or automating UI clicks.
 * **Starvation-Proof Timers:** Core tracking and animations are scheduled on `RunLoop.main` in `.common` mode, preventing the cursor from freezing even during heavy UI interaction (like window dragging).
 
@@ -103,16 +104,22 @@ To make Echo a truly production-grade tool with pixel-perfect accuracy, we built
 
 ### 3. High-Priority Snapping Override Pipeline
 * **Problem:** Vision coordinate regression is never 100% pixel-perfect (often off by 20–40 pixels).
-* **Solution:** Built a multi-layered coordinate resolution pipeline that executes in this priority order:
-  1. **Accessibility Snap:** Grabs the frontmost window and recursively traverses the **Accessibility Tree (`AXUIElement`)** to locate a button or menu option matching the spoken text (e.g. *"Battery"*). If found, it snaps *exactly* to its OS-level center point.
-  2. **Finder Desktop Snap:** Runs a safe AppleScript Finder check. If pointing to a Desktop item (e.g. your folder `"KURSOR"`), it overrides coordinates with Finder's exact desktop grid icon positions.
-  3. **High-Res Vision Snap:** Falls back to AI vision guesses if pointing to abstract coordinate targets.
+* **Solution:** Built a multi-layered, dynamic snapping pipeline. To prevent Finder's background layout containers from hijacking desktop searches:
+  * If **Finder is the active app**, the snapping engine prioritizes the **Finder Desktop Snap** (AppleScript desktop grid lookup) first to guarantee pixel-perfect icon center locking.
+  * If **any other app is active**, it prioritizes the **Accessibility Snap** (`AXUIElement` window hierarchy traversal, filtering out dummy/container layout elements with coordinates near zero), falling back to Finder Desktop icons and then Vision coordinates.
 
 ### 4. Bilingual Hindi, Hinglish, & English Voice Interaction Support
 * **Problem:** Self-learners and non-trained individuals in regions like India often communicate using a mix of Hindi and English (Hinglish) or pure Hindi. Standard speech engines defaulting to US English fail to transcribe these accents or mixed vocabularies, and standard AI agents reply in formal English, causing a cognitive disconnect for natural conversation.
 * **Solution:** 
   * Re-architected `AppleSpeechTranscriptionProvider.swift` to dynamically prioritize `en-IN` (Indian English/Hinglish) and `hi-IN` (Hindi) locales at the top of the speech-recognition cascade, offering flawless offline, low-latency native dictation for mixed Indian accents and dialects.
   * Injected conversational multilingual directives into the companion's core Groq LLM system prompt (`CompanionManager.swift`). The companion now understands Hinglish queries (e.g., *"KURSOR folder kaha hai?"* or *"Settings me Battery option open karo"*) and naturally responds back in casual Hinglish or Hindi, while retaining perfect English responses for English prompts.
+
+### 5. Circular Magnifying Lens Highlight
+* **Problem:** Simply pointing with a generic cursor or blinking reticle is often overlooked on dense high-resolution Retina screens, leaving users searching for small folders or buttons.
+* **Solution:**
+  * Added raw CGImage passing inside `CompanionScreenCaptureUtility.swift` when display screenshots are taken.
+  * Once the snapping overrides resolve the perfect coordinate, `CompanionManager` translates it back to screenshot pixels and crops a high-precision `160x160` square pixel slice of the screen buffer around the target center.
+  * Exposes the crop as a SwiftUI image inside `OverlayWindow.swift` which is clipped to a circular lens, scaled up to **1.3x magnification**, and styled with a metal rim glare reflection and a pulsing dotted focus border.
 
 ---
 
