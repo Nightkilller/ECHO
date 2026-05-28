@@ -43,6 +43,8 @@ final class AppleSpeechTranscriptionProvider: BuddyTranscriptionProvider {
 
     private static func makeBestAvailableSpeechRecognizer() -> SFSpeechRecognizer? {
         let preferredLocales = [
+            Locale(identifier: "en-IN"),  // Indian English / Hinglish (outstanding dictation model for Hinglish and Indian accents)
+            Locale(identifier: "hi-IN"),  // Pure Hindi
             Locale.autoupdatingCurrent,
             Locale(identifier: "en-US")
         ]
