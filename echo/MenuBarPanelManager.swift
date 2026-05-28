@@ -126,7 +126,7 @@ final class MenuBarPanelManager: NSObject {
 
     // MARK: - Panel Lifecycle
 
-    private func showPanel() {
+    func showPanel() {
         if panel == nil {
             createPanel()
         }

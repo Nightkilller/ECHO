@@ -196,7 +196,7 @@ struct BlueCursorView: View {
             Color.black.opacity(0.001)
 
             // Welcome speech bubble (first launch only)
-            if isCursorOnThisScreen && showWelcome && !welcomeText.isEmpty {
+            if companionManager.allPermissionsGranted && isCursorOnThisScreen && showWelcome && !welcomeText.isEmpty {
                 Text(welcomeText)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.white)
@@ -365,15 +365,9 @@ struct BlueCursorView: View {
             startTrackingCursor()
 
             // Only show welcome message on first appearance (app start)
-            // and only if the cursor starts on this screen
-            if isFirstAppearance && isCursorOnThisScreen {
-                withAnimation(.easeIn(duration: 2.0)) {
-                    self.cursorOpacity = 1.0
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    self.bubbleOpacity = 0.0
-                    startWelcomeAnimation()
-                }
+            // and only if the cursor starts on this screen and permissions are already granted
+            if isFirstAppearance && isCursorOnThisScreen && companionManager.allPermissionsGranted {
+                startWelcomeSequence()
             } else {
                 self.cursorOpacity = 1.0
             }
@@ -381,6 +375,11 @@ struct BlueCursorView: View {
         .onDisappear {
             timer?.invalidate()
             navigationAnimationTimer?.invalidate()
+        }
+        .onChange(of: companionManager.allPermissionsGranted) { granted in
+            if granted && isFirstAppearance && isCursorOnThisScreen {
+                startWelcomeSequence()
+            }
         }
         .onChange(of: companionManager.detectedElementScreenLocation) { newLocation in
             // When a UI element location is detected, navigate the buddy to
@@ -760,6 +759,16 @@ struct BlueCursorView: View {
             let index = self.fullWelcomeMessage.index(self.fullWelcomeMessage.startIndex, offsetBy: currentIndex)
             self.welcomeText.append(self.fullWelcomeMessage[index])
             currentIndex += 1
+        }
+    }
+
+    private func startWelcomeSequence() {
+        withAnimation(.easeIn(duration: 2.0)) {
+            self.cursorOpacity = 1.0
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            self.bubbleOpacity = 0.0
+            self.startWelcomeAnimation()
         }
     }
 }

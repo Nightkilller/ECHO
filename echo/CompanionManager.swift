@@ -477,19 +477,22 @@ final class CompanionManager: ObservableObject {
     if pointing wouldn't help, append [POINT:none].
 
     agentic actions:
-    you can open folders, close windows, maximize windows, and tile/shift windows left or right.
-    - open a folder: if the user asks to open a specific folder (e.g. "open the folder KURSOR" or "open echo-main"), locate the folder icon on screen. if visible, point to it: [POINT:x,y:folderName] and append [RUN:open_folder:folderPath] where folderPath is the absolute path of the folder (e.g. "/Users/adityagupta/Desktop/KURSOR" or "/Users/adityagupta/Desktop/KURSOR/echo-main"). if the folder is not visible, point to none and still append [RUN:open_folder:folderPath].
-    - close a folder window: if the user asks you to close a folder/window, append [RUN:close_folder] at the very end of the response.
-    - maximize/fill screen: if the user asks to maximize, fill the screen, or make the folder/window full screen, point to the window's center or title bar, and append [RUN:maximize_window].
-    - tile/shift window left: if the user asks to shift the window to the left, tile left, or split left, point to the window, and append [RUN:tile_left].
-    - tile/shift window right: if the user asks to shift the window to the right, tile right, or split right, point to the window, and append [RUN:tile_right].
+    you can open folders, close windows, minimize windows, maximize windows, tile windows left or right, and launch/open applications.
+    - open a folder: if asked to open a specific folder (e.g. "open the folder KURSOR"), point to it [POINT:x,y:folderName] and append [RUN:open_folder:folderPath].
+    - close a window: if asked to close a window/folder, append [RUN:close_folder] to point to the red close button and click it.
+    - minimize a window: if asked to minimize a window, point to the yellow minimize button and append [RUN:minimize_window] to click it.
+    - maximize/fill screen: if asked to maximize or fill screen, point to the green zoom button and append [RUN:maximize_window] to click it.
+    - tile window left/right: if asked to tile left or right, point to the window and append [RUN:tile_left] or [RUN:tile_right].
+    - open/launch application: if asked to open/launch an app (e.g. "open spotify"), point to its icon on screen (like in the Dock) and append [RUN:open_app:appName] (e.g. [RUN:open_app:Spotify]).
 
     examples:
     - user asks how to color grade in final cut: "you'll want to open the color inspector — it's right up in the top right area of the toolbar. click that and you'll get all the color wheels and curves. [POINT:1100,42:color inspector]"
     - user asks to open the folder KURSOR: "opening the kursor folder for you. [POINT:450,230:kursor][RUN:open_folder:/Users/adityagupta/Desktop/KURSOR]"
     - user asks to close this folder: "closing the folder window. [RUN:close_folder]"
-    - user asks to maximize this window: "maximizing the window to fill the screen for you. [POINT:500,300:window][RUN:maximize_window]"
+    - user asks to minimize this window: "minimizing the window. [RUN:minimize_window]"
+    - user asks to maximize this window: "maximizing the window to fill the screen. [RUN:maximize_window]"
     - user asks to shift this window to the left: "tiling this window to the left side of the screen. [POINT:400,300:window][RUN:tile_left]"
+    - user asks to open Spotify from my dock: "opening spotify for you. [POINT:800,940:spotify][RUN:open_app:Spotify]"
     - user asks what html is: "html stands for hypertext markup language, it's basically the skeleton of every web page. curious how it connects to the css you're looking at? [POINT:none]"
     """
 
@@ -559,13 +562,27 @@ final class CompanionManager: ObservableObject {
 
                 var actionFlightTarget: CGPoint? = nil
 
-                // Determine flight targets
+                // Determine flight targets based on close/minimize/maximize actions
                 if actionResult.shouldCloseFolder {
-                    if let closeBtnLoc = self.getFrontmostFinderWindowCloseButtonLocation() {
+                    if let closeBtnLoc = self.getWindowButtonLocation(attributeName: kAXCloseButtonAttribute) {
                         actionFlightTarget = closeBtnLoc
                         self.detectedElementBubbleText = "closing this!"
                         self.detectedElementDisplayFrame = self.screenFrameContainingPoint(closeBtnLoc)
-                        print("🎯 Folder closing target set: \(closeBtnLoc)")
+                        print("🎯 Close button target set: \(closeBtnLoc)")
+                    }
+                } else if actionResult.windowAction == "minimize" {
+                    if let minBtnLoc = self.getWindowButtonLocation(attributeName: kAXMinimizeButtonAttribute) {
+                        actionFlightTarget = minBtnLoc
+                        self.detectedElementBubbleText = "minimizing this!"
+                        self.detectedElementDisplayFrame = self.screenFrameContainingPoint(minBtnLoc)
+                        print("🎯 Minimize button target set: \(minBtnLoc)")
+                    }
+                } else if actionResult.windowAction == "maximize" {
+                    if let zoomBtnLoc = self.getWindowButtonLocation(attributeName: kAXZoomButtonAttribute) {
+                        actionFlightTarget = zoomBtnLoc
+                        self.detectedElementBubbleText = "maximizing this!"
+                        self.detectedElementDisplayFrame = self.screenFrameContainingPoint(zoomBtnLoc)
+                        print("🎯 Zoom/Maximize button target set: \(zoomBtnLoc)")
                     }
                 }
 
@@ -593,10 +610,15 @@ final class CompanionManager: ObservableObject {
                     self.detectedElementScreenLocation = actionFlightTarget
                     flightDuration = self.calculateFlightDuration(to: actionFlightTarget)
                     
-                    let closeBtn = self.getFrontmostFinderCloseButtonAXElement()
                     Task {
                         try? await Task.sleep(nanoseconds: UInt64((flightDuration + 0.15) * 1_000_000_000))
-                        self.closeFrontmostFinderWindow(closeButton: closeBtn)
+                        if actionResult.shouldCloseFolder {
+                            self.pressWindowButton(attributeName: kAXCloseButtonAttribute)
+                        } else if actionResult.windowAction == "minimize" {
+                            self.pressWindowButton(attributeName: kAXMinimizeButtonAttribute)
+                        } else if actionResult.windowAction == "maximize" {
+                            self.pressWindowButton(attributeName: kAXZoomButtonAttribute)
+                        }
                     }
                 } else if let pointCoordinate = parseResult.coordinate,
                    let targetScreenCapture {
@@ -673,41 +695,55 @@ final class CompanionManager: ObservableObject {
                         }
                     }
 
-                    // Crop the screenshot around the final resolved coordinate for screen magnification
-                    let fullCGImage = targetScreenCapture.cgImage
-                    let displayLocalXForCrop = finalLocation.x - displayFrame.origin.x
-                    let appKitYForCrop = finalLocation.y - displayFrame.origin.y
-                    let displayLocalYForCrop = displayFrame.height - appKitYForCrop
+                    // Decide whether this is an action (open/close folder, minimize/maximize/tile).
+                    // If it is an action, the user does not want the magnifying glass overlay to show.
+                    let isAction = actionResult.openFolderPath != nil
+                        || actionResult.shouldCloseFolder
+                        || actionResult.windowAction == "minimize"
+                        || actionResult.windowAction == "maximize"
+                        || actionResult.windowAction == "tile_left"
+                        || actionResult.windowAction == "tile_right"
                     
-                    let pWidth = CGFloat(targetScreenCapture.screenshotWidthInPixels)
-                    let pHeight = CGFloat(targetScreenCapture.screenshotHeightInPixels)
-                    let dWidth = CGFloat(targetScreenCapture.displayWidthInPoints)
-                    let dHeight = CGFloat(targetScreenCapture.displayHeightInPoints)
-                    
-                    let pixelX = displayLocalXForCrop * (pWidth / dWidth)
-                    let pixelY = displayLocalYForCrop * (pHeight / dHeight)
-                    
-                    let cropWidth: CGFloat = 160
-                    let cropHeight: CGFloat = 160
-                    let cropX = pixelX - cropWidth / 2.0
-                    let cropY = pixelY - cropHeight / 2.0
-                    let cropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
-                    
-                    let imageWidth = CGFloat(fullCGImage.width)
-                    let imageHeight = CGFloat(fullCGImage.height)
-                    let clampedRect = CGRect(
-                        x: max(0, min(cropRect.origin.x, imageWidth - cropRect.width)),
-                        y: max(0, min(cropRect.origin.y, imageHeight - cropRect.height)),
-                        width: min(cropRect.width, imageWidth),
-                        height: min(cropRect.height, imageHeight)
-                    )
-                    
-                    if let croppedCG = fullCGImage.cropping(to: clampedRect) {
-                        let nsImg = NSImage(cgImage: croppedCG, size: NSSize(width: clampedRect.width, height: clampedRect.height))
-                        self.magnifiedImage = nsImg
-                        print("🔍 Magnifier: Successfully cropped final resolved coordinate at \(finalLocation) (pixels: \(pixelX), \(pixelY))")
-                    } else {
+                    if isAction {
                         self.magnifiedImage = nil
+                        print("🔍 Magnifier: Skipped magnification for folder action / window layout.")
+                    } else {
+                        // Crop the screenshot around the final resolved coordinate for screen magnification (folders/items search)
+                        let fullCGImage = targetScreenCapture.cgImage
+                        let displayLocalXForCrop = finalLocation.x - displayFrame.origin.x
+                        let appKitYForCrop = finalLocation.y - displayFrame.origin.y
+                        let displayLocalYForCrop = displayFrame.height - appKitYForCrop
+                        
+                        let pWidth = CGFloat(targetScreenCapture.screenshotWidthInPixels)
+                        let pHeight = CGFloat(targetScreenCapture.screenshotHeightInPixels)
+                        let dWidth = CGFloat(targetScreenCapture.displayWidthInPoints)
+                        let dHeight = CGFloat(targetScreenCapture.displayHeightInPoints)
+                        
+                        let pixelX = displayLocalXForCrop * (pWidth / dWidth)
+                        let pixelY = displayLocalYForCrop * (pHeight / dHeight)
+                        
+                        let cropWidth: CGFloat = 160
+                        let cropHeight: CGFloat = 160
+                        let cropX = pixelX - cropWidth / 2.0
+                        let cropY = pixelY - cropHeight / 2.0
+                        let cropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+                        
+                        let imageWidth = CGFloat(fullCGImage.width)
+                        let imageHeight = CGFloat(fullCGImage.height)
+                        let clampedRect = CGRect(
+                            x: max(0, min(cropRect.origin.x, imageWidth - cropRect.width)),
+                            y: max(0, min(cropRect.origin.y, imageHeight - cropRect.height)),
+                            width: min(cropRect.width, imageWidth),
+                            height: min(cropRect.height, imageHeight)
+                        )
+                        
+                        if let croppedCG = fullCGImage.cropping(to: clampedRect) {
+                            let nsImg = NSImage(cgImage: croppedCG, size: NSSize(width: clampedRect.width, height: clampedRect.height))
+                            self.magnifiedImage = nsImg
+                            print("🔍 Magnifier: Successfully cropped final resolved coordinate at \(finalLocation) (pixels: \(pixelX), \(pixelY))")
+                        } else {
+                            self.magnifiedImage = nil
+                        }
                     }
 
                     detectedElementScreenLocation = finalLocation
@@ -730,6 +766,14 @@ final class CompanionManager: ObservableObject {
                             self.performWindowAction(winAction)
                         }
                     }
+                    if let openApp = actionResult.openAppName {
+                        let duration = self.calculateFlightDuration(to: finalLocation)
+                        flightDuration = duration
+                        Task {
+                            try? await Task.sleep(nanoseconds: UInt64((duration + 0.15) * 1_000_000_000))
+                            self.openApplication(named: openApp)
+                        }
+                    }
                 } else {
                     print("🎯 Element pointing: \(parseResult.elementLabel ?? "no element") — no coordinate to navigate to")
                     print("🎯 Note: Model may not have included [POINT:x,y:label] tag in response")
@@ -741,6 +785,10 @@ final class CompanionManager: ObservableObject {
                     if let winAction = actionResult.windowAction {
                         print("🎯 Performing window action without cursor flight: \(winAction)")
                         self.performWindowAction(winAction)
+                    }
+                    if let openApp = actionResult.openAppName {
+                        print("🎯 Opening application without cursor flight: \(openApp)")
+                        self.openApplication(named: openApp)
                     }
                 }
 
@@ -900,7 +948,8 @@ final class CompanionManager: ObservableObject {
         let spokenText: String
         let openFolderPath: String?
         let shouldCloseFolder: Bool
-        let windowAction: String? // "maximize", "tile_left", "tile_right", or nil
+        let windowAction: String? // "maximize", "minimize", "tile_left", "tile_right", or nil
+        let openAppName: String?
     }
 
     static func parseActionCommands(from responseText: String) -> ActionParseResult {
@@ -908,6 +957,7 @@ final class CompanionManager: ObservableObject {
         var openFolderPath: String? = nil
         var shouldCloseFolder = false
         var windowAction: String? = nil
+        var openAppName: String? = nil
 
         // Match [RUN:open_folder:path] case-insensitively and with arbitrary spacing
         let openFolderPattern = #"\[\s*RUN\s*:\s*open_folder\s*:\s*([^\]]+)\]"#
@@ -941,6 +991,16 @@ final class CompanionManager: ObservableObject {
             cleanText = regex.stringByReplacingMatches(in: cleanText, options: [], range: nsRange, withTemplate: "")
         }
 
+        // Match [RUN:minimize_window] or [RUN:minimize_folder] case-insensitively and with arbitrary spacing
+        let minimizePattern = #"\[\s*RUN\s*:\s*minimize_(?:window|folder)\s*\]"#
+        if let regex = try? NSRegularExpression(pattern: minimizePattern, options: [.caseInsensitive]) {
+            let nsRange = NSRange(cleanText.startIndex..., in: cleanText)
+            if regex.firstMatch(in: cleanText, options: [], range: nsRange) != nil {
+                windowAction = "minimize"
+            }
+            cleanText = regex.stringByReplacingMatches(in: cleanText, options: [], range: nsRange, withTemplate: "")
+        }
+
         // Match [RUN:tile_left] case-insensitively and with arbitrary spacing
         let tileLeftPattern = #"\[\s*RUN\s*:\s*tile_left\s*\]"#
         if let regex = try? NSRegularExpression(pattern: tileLeftPattern, options: [.caseInsensitive]) {
@@ -961,11 +1021,24 @@ final class CompanionManager: ObservableObject {
             cleanText = regex.stringByReplacingMatches(in: cleanText, options: [], range: nsRange, withTemplate: "")
         }
 
+        // Match [RUN:open_app:appName] case-insensitively and with arbitrary spacing
+        let openAppPattern = #"\[\s*RUN\s*:\s*open_app\s*:\s*([^\]]+)\]"#
+        if let regex = try? NSRegularExpression(pattern: openAppPattern, options: [.caseInsensitive]) {
+            let nsRange = NSRange(cleanText.startIndex..., in: cleanText)
+            if let match = regex.firstMatch(in: cleanText, options: [], range: nsRange) {
+                if let appRange = Range(match.range(at: 1), in: cleanText) {
+                    openAppName = String(cleanText[appRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+            cleanText = regex.stringByReplacingMatches(in: cleanText, options: [], range: nsRange, withTemplate: "")
+        }
+
         return ActionParseResult(
             spokenText: cleanText.trimmingCharacters(in: .whitespacesAndNewlines),
             openFolderPath: openFolderPath,
             shouldCloseFolder: shouldCloseFolder,
-            windowAction: windowAction
+            windowAction: windowAction,
+            openAppName: openAppName
         )
     }
 
@@ -1250,27 +1323,337 @@ final class CompanionManager: ObservableObject {
         }
     }
 
-    private func performWindowAction(_ action: String) {
-        guard let frontApp = NSWorkspace.shared.frontmostApplication else { return }
-        let appElement = AXUIElementCreateApplication(frontApp.processIdentifier)
+    private func getFrontmostAppWindowAXElement() -> AXUIElement? {
+        let ourPID = ProcessInfo.processInfo.processIdentifier
+        var targetPID: pid_t? = nil
+        
+        // 1. Try to find the frontmost active window using CGWindowListCopyWindowInfo (Z-ordered)
+        let options = CGWindowListOption(arrayLiteral: .excludeDesktopElements, .optionOnScreenOnly)
+        if let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: AnyObject]] {
+            for windowInfo in windowList {
+                guard let windowOwnerPID = windowInfo[kCGWindowOwnerPID as String] as? pid_t else { continue }
+                guard windowOwnerPID != ourPID else { continue }
+                
+                // Ensure the window is in layer 0 (normal windows layer)
+                guard let windowLayer = windowInfo[kCGWindowLayer as String] as? Int, windowLayer == 0 else { continue }
+                
+                // Ensure window size is reasonable (not 0x0 or tiny hidden/status windows)
+                guard let bounds = windowInfo[kCGWindowBounds as String] as? [String: CGFloat],
+                      let width = bounds["Width"], let height = bounds["Height"],
+                      width > 50, height > 50 else { continue }
+                
+                // Filter out standard macOS accessory/system processes
+                if let ownerName = windowInfo[kCGWindowOwnerName as String] as? String {
+                    let ignoredNames = ["Window Server", "Dock", "SystemUIServer", "Echo", "leanring-buddy", "Notification Center", "ControlCenter", "System Settings", "System Preferences"]
+                    if ignoredNames.contains(ownerName) {
+                        continue
+                    }
+                }
+                
+                targetPID = windowOwnerPID
+                break
+            }
+        }
+        
+        // 2. Fallback to the active application excluding ourselves
+        if targetPID == nil {
+            if let frontApp = NSWorkspace.shared.frontmostApplication, frontApp.processIdentifier != ourPID {
+                targetPID = frontApp.processIdentifier
+            } else {
+                let apps = NSWorkspace.shared.runningApplications
+                let regularApps = apps.filter { $0.activationPolicy == .regular && $0.processIdentifier != ourPID }
+                if let activeRegularApp = regularApps.first(where: { $0.isActive }) {
+                    targetPID = activeRegularApp.processIdentifier
+                } else if let firstRegularApp = regularApps.first {
+                    targetPID = firstRegularApp.processIdentifier
+                }
+            }
+        }
+        
+        guard let pid = targetPID else { return nil }
+        
+        if let app = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == pid }) {
+            print("🎯 Target application selected: \(app.localizedName ?? "unknown") (PID: \(pid))")
+        } else {
+            print("🎯 Target application selected PID: \(pid)")
+        }
+        
+        let appElement = AXUIElementCreateApplication(pid)
         
         var windowValue: AnyObject?
         let result = AXUIElementCopyAttributeValue(appElement, kAXMainWindowAttribute as CFString, &windowValue)
         
-        // Fallback to frontmost window if main window is not set
-        var windowToUse: AXUIElement? = nil
         if result == .success, let win = windowValue {
-            windowToUse = (win as! AXUIElement)
+            return (win as! AXUIElement)
         } else {
             var windowsValue: AnyObject?
             let winResult = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsValue)
             if winResult == .success, let windows = windowsValue as? [AXUIElement], let firstWin = windows.first {
-                windowToUse = firstWin
+                return firstWin
+            }
+        }
+        return nil
+    }
+
+    private func getWindowButtonAXElement(attributeName: String) -> AXUIElement? {
+        guard let window = getFrontmostAppWindowAXElement() else { return nil }
+        
+        var buttonValue: AnyObject?
+        let result = AXUIElementCopyAttributeValue(window, attributeName as CFString, &buttonValue)
+        guard result == .success, let button = buttonValue else {
+            return nil
+        }
+        return (button as! AXUIElement)
+    }
+
+    private func getWindowButtonLocation(attributeName: String) -> CGPoint? {
+        guard let button = getWindowButtonAXElement(attributeName: attributeName) else { return nil }
+        
+        var positionValue: AnyObject?
+        let posResult = AXUIElementCopyAttributeValue(button, kAXPositionAttribute as CFString, &positionValue)
+        guard posResult == .success else { return nil }
+        
+        var position = CGPoint.zero
+        AXValueGetValue(positionValue as! AXValue, .cgPoint, &position)
+        
+        var sizeValue: AnyObject?
+        let sizeResult = AXUIElementCopyAttributeValue(button, kAXSizeAttribute as CFString, &sizeValue)
+        var size = CGSize.zero
+        if sizeResult == .success {
+            AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
+        }
+        
+        let centerX = position.x + (size.width > 0 ? size.width / 2.0 : 7.0)
+        let centerY = position.y + (size.height > 0 ? size.height / 2.0 : 7.0)
+        
+        guard let primaryScreen = NSScreen.screens.first else { return nil }
+        let mainScreenHeight = primaryScreen.frame.height
+        
+        return CGPoint(x: centerX, y: mainScreenHeight - centerY)
+    }
+
+    private func pressWindowButton(attributeName: String) {
+        if let button = getWindowButtonAXElement(attributeName: attributeName) {
+            let result = AXUIElementPerformAction(button, kAXPressAction as CFString)
+            if result == .success {
+                print("🎯 Successfully pressed window button \(attributeName)")
+                return
             }
         }
         
-        guard let window = windowToUse else {
-            print("⚠️ Window action error: No frontmost window found for \(frontApp.localizedName ?? "app")")
+        // Fallbacks if AX action performance failed or wasn't allowed:
+        print("⚠️ AXPressAction failed for button \(attributeName), executing AppleScript fallback...")
+        
+        let ourPID = ProcessInfo.processInfo.processIdentifier
+        var targetAppName = "Finder"
+        
+        // Find the active application name to target
+        let options = CGWindowListOption(arrayLiteral: .excludeDesktopElements, .optionOnScreenOnly)
+        if let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: AnyObject]] {
+            for windowInfo in windowList {
+                guard let windowOwnerPID = windowInfo[kCGWindowOwnerPID as String] as? pid_t else { continue }
+                guard windowOwnerPID != ourPID else { continue }
+                guard let windowLayer = windowInfo[kCGWindowLayer as String] as? Int, windowLayer == 0 else { continue }
+                if let ownerName = windowInfo[kCGWindowOwnerName as String] as? String {
+                    let ignoredNames = ["Window Server", "Dock", "SystemUIServer", "Echo", "leanring-buddy", "Notification Center", "ControlCenter"]
+                    if !ignoredNames.contains(ownerName) {
+                        targetAppName = ownerName
+                        break
+                    }
+                }
+            }
+        }
+        
+        if attributeName == kAXCloseButtonAttribute {
+            let appleScript = """
+            tell application "System Events"
+                tell process "\(targetAppName)"
+                    if (count of windows) > 0 then
+                        click button 1 of window 1
+                    end if
+                end tell
+            end tell
+            """
+            if let script = NSAppleScript(source: appleScript) {
+                var error: NSDictionary?
+                script.executeAndReturnError(&error)
+                if error != nil {
+                    // Finder fallback
+                    let finderScript = """
+                    tell application "Finder"
+                        if (count of windows) > 0 then
+                            close window 1
+                        end if
+                    end tell
+                    """
+                    NSAppleScript(source: finderScript)?.executeAndReturnError(&error)
+                }
+            }
+        } else if attributeName == kAXMinimizeButtonAttribute {
+            let appleScript = """
+            tell application "System Events"
+                tell process "\(targetAppName)"
+                    if (count of windows) > 0 then
+                        set miniaturized of window 1 to true
+                    end if
+                end tell
+            end tell
+            """
+            if let script = NSAppleScript(source: appleScript) {
+                var error: NSDictionary?
+                script.executeAndReturnError(&error)
+            }
+        } else if attributeName == kAXZoomButtonAttribute {
+            let appleScript = """
+            tell application "System Events"
+                tell process "\(targetAppName)"
+                    if (count of windows) > 0 then
+                        set zoomed of window 1 to true
+                    end if
+                end tell
+            end tell
+            """
+            if let script = NSAppleScript(source: appleScript) {
+                var error: NSDictionary?
+                script.executeAndReturnError(&error)
+            }
+        }
+    }
+
+    private func openApplication(named name: String) {
+        print("🎯 Attempting to open application: \"\(name)\"")
+        
+        let capitalized = name.capitalized
+        
+        // Helper to unminimize windows of this app with native Genie/Scale system transitions
+        let unminimizeHelper = { (appName: String) in
+            let appleScript = """
+            tell application "System Events"
+                if exists process "\(appName)" then
+                    tell process "\(appName)"
+                        try
+                            set miniaturizedWindows to every window whose miniaturized is true
+                            repeat with win in miniaturizedWindows
+                                set miniaturized of win to false
+                            end repeat
+                        end try
+                        try
+                            set collapsedWindows to every window whose collapsed is true
+                            repeat with win in collapsedWindows
+                                set collapsed of win to false
+                            end repeat
+                        end try
+                    end tell
+                end if
+            end tell
+            """
+            if let script = NSAppleScript(source: appleScript) {
+                var error: NSDictionary?
+                script.executeAndReturnError(&error)
+            }
+        }
+        
+        // 1. Standard fullPath API to search Spotlight for application path by name
+        if let path = NSWorkspace.shared.fullPath(forApplication: name) {
+            let url = URL(fileURLWithPath: path)
+            if NSWorkspace.shared.open(url) {
+                print("🎯 Successfully opened application \"\(name)\" at path \(path) via fullPath")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    unminimizeHelper(name)
+                    unminimizeHelper(capitalized)
+                }
+                return
+            }
+        }
+        
+        // Try capitalized name for fullPath lookup
+        if let path = NSWorkspace.shared.fullPath(forApplication: capitalized) {
+            let url = URL(fileURLWithPath: path)
+            if NSWorkspace.shared.open(url) {
+                print("🎯 Successfully opened application \"\(capitalized)\" at path \(path) via fullPath")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    unminimizeHelper(capitalized)
+                    unminimizeHelper(name)
+                }
+                return
+            }
+        }
+        
+        // 2. Try NSWorkspace launchApplication
+        if NSWorkspace.shared.launchApplication(name) {
+            print("🎯 Successfully launched application \"\(name)\" via NSWorkspace.launchApplication")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                unminimizeHelper(name)
+                unminimizeHelper(capitalized)
+            }
+            return
+        }
+        
+        if NSWorkspace.shared.launchApplication(capitalized) {
+            print("🎯 Successfully launched application \"\(capitalized)\" via NSWorkspace.launchApplication")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                unminimizeHelper(capitalized)
+                unminimizeHelper(name)
+            }
+            return
+        }
+        
+        // 3. Fallback: try opening from standard paths
+        let possiblePaths = [
+            "/Applications/\(name).app",
+            "/Applications/\(capitalized).app",
+            "/System/Applications/\(name).app",
+            "/System/Applications/\(capitalized).app",
+            "/Applications/Utilities/\(name).app",
+            "/Applications/Utilities/\(capitalized).app"
+        ]
+        for path in possiblePaths {
+            if FileManager.default.fileExists(atPath: path) {
+                let url = URL(fileURLWithPath: path)
+                if NSWorkspace.shared.open(url) {
+                    print("🎯 Successfully opened application at path \(path)")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        unminimizeHelper(name)
+                        unminimizeHelper(capitalized)
+                    }
+                    return
+                }
+            }
+        }
+        
+        // 4. Secondary fallback: AppleScript to activate
+        let appleScript = "tell application \"\(name)\" to activate"
+        if let script = NSAppleScript(source: appleScript) {
+            var error: NSDictionary?
+            script.executeAndReturnError(&error)
+            if error == nil {
+                print("🎯 Successfully activated application \"\(name)\" via AppleScript")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    unminimizeHelper(name)
+                }
+                return
+            }
+        }
+        
+        let capitalizedAppleScript = "tell application \"\(capitalized)\" to activate"
+        if let script = NSAppleScript(source: capitalizedAppleScript) {
+            var error: NSDictionary?
+            script.executeAndReturnError(&error)
+            if error == nil {
+                print("🎯 Successfully activated application \"\(capitalized)\" via AppleScript")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    unminimizeHelper(capitalized)
+                }
+                return
+            }
+        }
+        
+        print("⚠️ Failed to launch application \"\(name)\"")
+    }
+
+    private func performWindowAction(_ action: String) {
+        guard let window = getFrontmostAppWindowAXElement() else {
+            print("⚠️ Window action error: No frontmost window found")
             return
         }
         
@@ -1309,7 +1692,7 @@ final class CompanionManager: ObservableObject {
             AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, axSizeValue)
         }
         
-        print("🎯 Handled window action \"\(action)\" on \(frontApp.localizedName ?? "app")")
+        print("🎯 Handled window action \"\(action)\"")
     }
 
 }
