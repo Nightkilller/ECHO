@@ -38,6 +38,7 @@ While preserving the magical essence of an on-screen visual companion that physi
 * **Parabolic Bezier Flight:** The companion (a glowing blue triangle) does not simply teleport. It flies along physics-based quadratic curves, rotating dynamically to align with its trajectory, scaling up at the apex, and landing exactly on target.
 * **Push-To-Talk Listening:** Hold down `Control + Option` to transform the companion into an active, glowing blue voice waveform that listens to your queries.
 * **Offline Local Transcription:** Uses macOS's native, offline **Apple Speech framework** to transcribe your voice locally on-device. No audio files are sent over the network, ensuring complete privacy.
+* **Bilingual & Dialect Support:** Natively supports dictation and voice interactions in **Hindi, Hinglish (Hindi written in Roman script), and English**. The local speech recognizer is fully optimized for Indian accents, and the AI model is instructed to automatically match your spoken language when talking back.
 * **Agentic OS Integration:** Dynamically parses voice instructions into structured local actions, like opening paths or automating UI clicks.
 * **Starvation-Proof Timers:** Core tracking and animations are scheduled on `RunLoop.main` in `.common` mode, preventing the cursor from freezing even during heavy UI interaction (like window dragging).
 
@@ -106,6 +107,12 @@ To make Echo a truly production-grade tool with pixel-perfect accuracy, we built
   1. **Accessibility Snap:** Grabs the frontmost window and recursively traverses the **Accessibility Tree (`AXUIElement`)** to locate a button or menu option matching the spoken text (e.g. *"Battery"*). If found, it snaps *exactly* to its OS-level center point.
   2. **Finder Desktop Snap:** Runs a safe AppleScript Finder check. If pointing to a Desktop item (e.g. your folder `"KURSOR"`), it overrides coordinates with Finder's exact desktop grid icon positions.
   3. **High-Res Vision Snap:** Falls back to AI vision guesses if pointing to abstract coordinate targets.
+
+### 4. Bilingual Hindi, Hinglish, & English Voice Interaction Support
+* **Problem:** Self-learners and non-trained individuals in regions like India often communicate using a mix of Hindi and English (Hinglish) or pure Hindi. Standard speech engines defaulting to US English fail to transcribe these accents or mixed vocabularies, and standard AI agents reply in formal English, causing a cognitive disconnect for natural conversation.
+* **Solution:** 
+  * Re-architected `AppleSpeechTranscriptionProvider.swift` to dynamically prioritize `en-IN` (Indian English/Hinglish) and `hi-IN` (Hindi) locales at the top of the speech-recognition cascade, offering flawless offline, low-latency native dictation for mixed Indian accents and dialects.
+  * Injected conversational multilingual directives into the companion's core Groq LLM system prompt (`CompanionManager.swift`). The companion now understands Hinglish queries (e.g., *"KURSOR folder kaha hai?"* or *"Settings me Battery option open karo"*) and naturally responds back in casual Hinglish or Hindi, while retaining perfect English responses for English prompts.
 
 ---
 
