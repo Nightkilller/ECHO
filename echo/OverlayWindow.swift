@@ -165,6 +165,18 @@ struct BlueCursorView: View {
     /// Only during the return flight can cursor movement cancel the animation.
     @State private var isReturningToCursor: Bool = false
 
+    /// The exact target location (without offset) in SwiftUI coordinates, used to draw the focus ring.
+    @State private var targetPositionInSwiftUI: CGPoint = .zero
+    
+    /// The scale factor of the spotlight focus circle, starts at 2.5 (large) and scales down to 1.0 (snapped)
+    @State private var focusCircleScale: CGFloat = 2.5
+    
+    /// The pulsing scale factor of the spotlight focus circle
+    @State private var focusPulseScale: CGFloat = 1.0
+    
+    /// The opacity of the spotlight focus circle
+    @State private var focusCircleOpacity: Double = 0.0
+
 
 
     private let fullWelcomeMessage = "hey! i'm echo"
@@ -247,6 +259,39 @@ struct BlueCursorView: View {
                     .onPreferenceChange(NavigationBubbleSizePreferenceKey.self) { newSize in
                         navigationBubbleSize = newSize
                     }
+            }
+
+            // Futuristic glowing focus ring to spotlight/highlight the target folder or element
+            if (buddyNavigationMode == .pointingAtTarget || buddyNavigationMode == .navigatingToTarget) && focusCircleOpacity > 0 {
+                ZStack {
+                    // Outer pulsing focus ring
+                    Circle()
+                        .stroke(
+                            RadialGradient(
+                                colors: [DS.Colors.overlayCursorBlue, DS.Colors.overlayCursorBlue.opacity(0.3)],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 24
+                            ),
+                            lineWidth: 2
+                        )
+                        .frame(width: 44, height: 44)
+                        .scaleEffect(focusCircleScale * focusPulseScale)
+                    
+                    // Inner magnifying reticle/dot
+                    Circle()
+                        .fill(DS.Colors.overlayCursorBlue)
+                        .frame(width: 6, height: 6)
+                        .shadow(color: DS.Colors.overlayCursorBlue, radius: 4)
+                    
+                    // Ambient glowing aura
+                    Circle()
+                        .fill(DS.Colors.overlayCursorBlue.opacity(0.12))
+                        .frame(width: 56, height: 56)
+                        .scaleEffect(focusCircleScale)
+                }
+                .position(targetPositionInSwiftUI)
+                .opacity(focusCircleOpacity)
             }
 
             // Blue triangle cursor — shown when idle or while TTS is playing (responding).
@@ -442,6 +487,14 @@ struct BlueCursorView: View {
         let mouseLocation = NSEvent.mouseLocation
         cursorPositionWhenNavigationStarted = convertScreenPointToSwiftUICoordinates(mouseLocation)
 
+        // Save the exact target position for the focus ring highlight
+        self.targetPositionInSwiftUI = targetInSwiftUI
+        self.focusCircleScale = 2.5
+        self.focusPulseScale = 1.0
+        withAnimation(.easeOut(duration: 0.4)) {
+            self.focusCircleOpacity = 0.6 // faint visual target during flight
+        }
+
         // Enter navigation mode — stop cursor following
         buddyNavigationMode = .navigatingToTarget
         isReturningToCursor = false
@@ -547,6 +600,18 @@ struct BlueCursorView: View {
         navigationBubbleSize = .zero
         navigationBubbleScale = 0.5
 
+        // Animate the focus circle scaling down and fading in completely to snap onto the target
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+            self.focusCircleScale = 1.0
+            self.focusCircleOpacity = 1.0
+        }
+        
+        // Start the repeating breathing pulse animation
+        self.focusPulseScale = 1.0
+        withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+            self.focusPulseScale = 1.15
+        }
+
         // Use custom bubble text from the companion manager (e.g. onboarding demo)
         // if available, otherwise fall back to a random pointer phrase
         let pointerPhrase = companionManager.detectedElementBubbleText
@@ -608,6 +673,12 @@ struct BlueCursorView: View {
         buddyNavigationMode = .navigatingToTarget
         isReturningToCursor = true
 
+        withAnimation(.easeOut(duration: 0.3)) {
+            self.focusCircleOpacity = 0.0
+            self.focusCircleScale = 2.5
+            self.focusPulseScale = 1.0
+        }
+
         animateBezierFlightArc(to: cursorWithTrackingOffset) {
             self.finishNavigationAndResumeFollowing()
         }
@@ -621,6 +692,13 @@ struct BlueCursorView: View {
         navigationBubbleOpacity = 0.0
         navigationBubbleScale = 1.0
         buddyFlightScale = 1.0
+        
+        withAnimation(.easeOut(duration: 0.3)) {
+            self.focusCircleOpacity = 0.0
+            self.focusCircleScale = 2.5
+            self.focusPulseScale = 1.0
+        }
+        
         finishNavigationAndResumeFollowing()
     }
 
@@ -635,6 +713,11 @@ struct BlueCursorView: View {
         navigationBubbleText = ""
         navigationBubbleOpacity = 0.0
         navigationBubbleScale = 1.0
+        
+        self.focusCircleOpacity = 0.0
+        self.focusCircleScale = 2.5
+        self.focusPulseScale = 1.0
+        
         companionManager.clearDetectedElementLocation()
     }
 
