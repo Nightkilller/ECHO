@@ -1,0 +1,56 @@
+# Environment & Secrets (Crucial to ignore Groq API Keys and credentials)
+.env
+echo/.env
+.env.*
+*.env
+.dev.vars
+worker/.dev.vars
+*.vars
+
+# Local Logs
+*.log
+echo.log
+
+# Build & Compiler Cache Directories
+module-cache/
+build/
+releases/
+DerivedData/
+.idea/
+.vscode/
+temp_icon.iconset/
+
+# Binary & Application Bundles
+*.app
+Echo.app/
+
+# PDF Documentation (As requested)
+*.pdf
+Echo_Documentation.pdf
+
+# macOS System Files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.VolumeIcon.icns
+.com.apple.timemachine.donotbackup
+
+# Node.js
+node_modules/
+worker/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# User Specific IDE & Xcode Files
+*.xcuserstate
+*.xcworkspace
+xcuserdata/
+.claude/
+coding-plans/
