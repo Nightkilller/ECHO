@@ -1,10 +1,13 @@
 #!/bin/bash
 set -e
 
-PNG_PATH="/Users/adityagupta/Desktop/KURSOR/clicky-main/echo/echo_app_icon.png"
-ICONSET_DIR="/Users/adityagupta/Desktop/KURSOR/clicky-main/echo/AppIcon.iconset"
-ICNS_PATH="/Users/adityagupta/Desktop/KURSOR/clicky-main/echo/AppIcon.icns"
-APPICONSET_DIR="/Users/adityagupta/Desktop/KURSOR/clicky-main/echo/Assets.xcassets/AppIcon.appiconset"
+# Get the directory of this script (project root)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+PNG_PATH="$SCRIPT_DIR/echo/echo_app_icon.png"
+ICONSET_DIR="$SCRIPT_DIR/echo/AppIcon.iconset"
+ICNS_PATH="$SCRIPT_DIR/echo/AppIcon.icns"
+APPICONSET_DIR="$SCRIPT_DIR/echo/Assets.xcassets/AppIcon.appiconset"
 
 if [ ! -f "$PNG_PATH" ]; then
     echo "❌ echo_app_icon.png not found in echo/ folder!"
