@@ -46,6 +46,9 @@ final class CompanionManager: ObservableObject {
     /// BlueCursorView uses this instead of a random pointer phrase.
     @Published var detectedElementBubbleText: String?
 
+    /// A small circular cropped/magnified snapshot of the folder or item being pointed at.
+    @Published var magnifiedImage: NSImage?
+
 
 
     let buddyDictationManager = BuddyDictationManager()
@@ -186,6 +189,7 @@ final class CompanionManager: ObservableObject {
         detectedElementScreenLocation = nil
         detectedElementDisplayFrame = nil
         detectedElementBubbleText = nil
+        magnifiedImage = nil
     }
 
     func stop() {
@@ -495,6 +499,7 @@ final class CompanionManager: ObservableObject {
         currentResponseTask?.cancel()
         elevenLabsTTSClient.stopPlayback()
         fallbackSynthesizer.stopSpeaking()
+        magnifiedImage = nil
 
         currentResponseTask = Task {
             // Stay in processing (spinner) state — no streaming text displayed
@@ -660,6 +665,43 @@ final class CompanionManager: ObservableObject {
                                 finalDisplayFrame = primaryScreen.frame
                             }
                         }
+                    }
+
+                    // Crop the screenshot around the final resolved coordinate for screen magnification
+                    let fullCGImage = targetScreenCapture.cgImage
+                    let displayLocalXForCrop = finalLocation.x - displayFrame.origin.x
+                    let appKitYForCrop = finalLocation.y - displayFrame.origin.y
+                    let displayLocalYForCrop = displayFrame.height - appKitYForCrop
+                    
+                    let pWidth = CGFloat(targetScreenCapture.screenshotWidthInPixels)
+                    let pHeight = CGFloat(targetScreenCapture.screenshotHeightInPixels)
+                    let dWidth = CGFloat(targetScreenCapture.displayWidthInPoints)
+                    let dHeight = CGFloat(targetScreenCapture.displayHeightInPoints)
+                    
+                    let pixelX = displayLocalXForCrop * (pWidth / dWidth)
+                    let pixelY = displayLocalYForCrop * (pHeight / dHeight)
+                    
+                    let cropWidth: CGFloat = 160
+                    let cropHeight: CGFloat = 160
+                    let cropX = pixelX - cropWidth / 2.0
+                    let cropY = pixelY - cropHeight / 2.0
+                    let cropRect = CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+                    
+                    let imageWidth = CGFloat(fullCGImage.width)
+                    let imageHeight = CGFloat(fullCGImage.height)
+                    let clampedRect = CGRect(
+                        x: max(0, min(cropRect.origin.x, imageWidth - cropRect.width)),
+                        y: max(0, min(cropRect.origin.y, imageHeight - cropRect.height)),
+                        width: min(cropRect.width, imageWidth),
+                        height: min(cropRect.height, imageHeight)
+                    )
+                    
+                    if let croppedCG = fullCGImage.cropping(to: clampedRect) {
+                        let nsImg = NSImage(cgImage: croppedCG, size: NSSize(width: clampedRect.width, height: clampedRect.height))
+                        self.magnifiedImage = nsImg
+                        print("🔍 Magnifier: Successfully cropped final resolved coordinate at \(finalLocation) (pixels: \(pixelX), \(pixelY))")
+                    } else {
+                        self.magnifiedImage = nil
                     }
 
                     detectedElementScreenLocation = finalLocation

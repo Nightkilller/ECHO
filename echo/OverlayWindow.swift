@@ -261,37 +261,52 @@ struct BlueCursorView: View {
                     }
             }
 
-            // Futuristic glowing focus ring to spotlight/highlight the target folder or element
-            if (buddyNavigationMode == .pointingAtTarget || buddyNavigationMode == .navigatingToTarget) && focusCircleOpacity > 0 {
+            // Circular shaped magnifying lens spotlight centered over the target folder/item
+            if (buddyNavigationMode == .pointingAtTarget || buddyNavigationMode == .navigatingToTarget) && focusCircleOpacity > 0,
+               let magnifiedImage = companionManager.magnifiedImage {
                 ZStack {
-                    // Outer pulsing focus ring
+                    // Raw cropped screen capture image scaled up to physically magnify the folder
+                    Image(nsImage: magnifiedImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 96, height: 96)
+                        .scaleEffect(1.3) // 1.3x magnification scale
+                        .clipShape(Circle())
+                    
+                    // Gloss glare overlay
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.15), Color.clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 96, height: 96)
+                    
+                    // Premium circular metal/blue magnifying glass rim/border
                     Circle()
                         .stroke(
-                            RadialGradient(
-                                colors: [DS.Colors.overlayCursorBlue, DS.Colors.overlayCursorBlue.opacity(0.3)],
-                                center: .center,
-                                startRadius: 0,
-                                endRadius: 24
+                            LinearGradient(
+                                colors: [DS.Colors.overlayCursorBlue, DS.Colors.overlayCursorBlue.opacity(0.5)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
                             ),
-                            lineWidth: 2
+                            lineWidth: 3.5
                         )
-                        .frame(width: 44, height: 44)
-                        .scaleEffect(focusCircleScale * focusPulseScale)
+                        .frame(width: 96, height: 96)
+                        .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.6), radius: 6)
                     
-                    // Inner magnifying reticle/dot
+                    // Subtle outer focus dots to frame the magnifying glass
                     Circle()
-                        .fill(DS.Colors.overlayCursorBlue)
-                        .frame(width: 6, height: 6)
-                        .shadow(color: DS.Colors.overlayCursorBlue, radius: 4)
-                    
-                    // Ambient glowing aura
-                    Circle()
-                        .fill(DS.Colors.overlayCursorBlue.opacity(0.12))
-                        .frame(width: 56, height: 56)
-                        .scaleEffect(focusCircleScale)
+                        .stroke(DS.Colors.overlayCursorBlue.opacity(0.3), style: StrokeStyle(lineWidth: 1, lineCap: .round, dash: [4, 4]))
+                        .frame(width: 106, height: 106)
+                        .scaleEffect(focusPulseScale)
                 }
                 .position(targetPositionInSwiftUI)
+                .scaleEffect(focusCircleScale)
                 .opacity(focusCircleOpacity)
+                .shadow(color: Color.black.opacity(0.4), radius: 10, x: 0, y: 5)
             }
 
             // Blue triangle cursor — shown when idle or while TTS is playing (responding).

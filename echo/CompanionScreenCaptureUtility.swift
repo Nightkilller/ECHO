@@ -19,6 +19,7 @@ struct CompanionScreenCapture {
     let displayFrame: CGRect
     let screenshotWidthInPixels: Int
     let screenshotHeightInPixels: Int
+    let cgImage: CGImage
 }
 
 @MainActor
@@ -118,7 +119,8 @@ enum CompanionScreenCaptureUtility {
                 displayHeightInPoints: Int(displayFrame.height),
                 displayFrame: displayFrame,
                 screenshotWidthInPixels: configuration.width,
-                screenshotHeightInPixels: configuration.height
+                screenshotHeightInPixels: configuration.height,
+                cgImage: cgImage
             ))
         }
 
