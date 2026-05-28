@@ -40,7 +40,7 @@ While preserving the magical essence of an on-screen visual companion that physi
 * **Offline Local Transcription:** Uses macOS's native, offline **Apple Speech framework** to transcribe your voice locally on-device. No audio files are sent over the network, ensuring complete privacy.
 * **Bilingual & Dialect Support:** Natively supports dictation and voice interactions in **Hindi, Hinglish (Hindi written in Roman script), and English**. The local speech recognizer is fully optimized for Indian accents, and the AI model is instructed to automatically match your spoken language when talking back.
 * **Circular Magnifying Lens Highlight:** When pointing at folders or items, Echo overlays a premium high-tech circular magnifying lens directly over the target, rendering a crop of the raw screen buffer scaled by **1.3x** with a gloss glare metal rim so the user instantly spots their item.
-* **Agentic OS Integration:** Dynamically parses voice instructions into structured local actions, like opening paths or automating UI clicks.
+* **Agentic OS Integration:** Dynamically parses voice instructions into structured local actions, like opening paths, closing windows, maximizing windows to fill the screen, or tiling/shifting windows to the left or right half of the screen.
 * **Starvation-Proof Timers:** Core tracking and animations are scheduled on `RunLoop.main` in `.common` mode, preventing the cursor from freezing even during heavy UI interaction (like window dragging).
 
 ---
