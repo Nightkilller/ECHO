@@ -126,7 +126,7 @@ To make Echo a truly production-grade tool with pixel-perfect accuracy, we built
 ## 📂 Project Structure
 
 ```
-clicky-main/
+ECHO/
 ├── README.md                 # Project vision, features, and setup
 ├── ARCHITECTURE.md           # Deep-dive module breakdowns
 ├── build.sh                  # Custom compilation & codesigning script
