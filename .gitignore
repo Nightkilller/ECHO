@@ -24,7 +24,7 @@ temp_icon.iconset/
 *.app
 Echo.app/
 
-# PDF Documentation (As requested)
+# PDF Documentation 
 *.pdf
 Echo_Documentation.pdf
 
